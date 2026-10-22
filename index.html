@@ -121,6 +121,7 @@ main{max-width:1180px;margin:0 auto;padding:22px 18px 60px}
 .pback{margin:0 0 12px;display:flex;align-items:center;gap:10px}.pback h3{font-size:15px}
 .nav{display:flex;gap:4px;margin-left:8px}.nav button{background:transparent;border:0;color:#C9CDD6;padding:6px 12px;border-radius:6px;font-weight:600;cursor:pointer;font:inherit}.nav button.on{background:#262A32;color:#fff}
 .stat.clk{cursor:pointer;text-align:left;width:100%;font:inherit}.stat.clk:hover{border-color:var(--red)}
+.kmp-mat th.c,.kmp-mat td.c{text-align:center;padding:9px 5px;font-size:10.5px;line-height:1.25;min-width:64px;max-width:80px;white-space:normal;vertical-align:bottom}.kmp-mat td.c{font-size:14px;vertical-align:middle}.kmp-var{color:var(--ok);font-weight:700}.kmp-yok{color:var(--bad);opacity:.75}
 @media (max-width:640px){.grid2{grid-template-columns:1fr}.top .who{display:none}}
 </style>
 </head>
@@ -398,7 +399,7 @@ var LOGO = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAQDAwMDAgQDA
     $('#g_ku').focus();
   }
 
-  function cikis() { try { sessionStorage.removeItem('karma_pys:oturum'); } catch (e) { } App.kullanici = null; App.src = null; App.personel = {}; ekranGiris(); }
+  function cikis() { try { sessionStorage.removeItem('karma_pys:oturum'); } catch (e) { } App.kullanici = null; App.src = null; App.kmp = null; App.personel = {}; ekranGiris(); }
 
   /* ================= veri yükleme ================= */
   function yukleniyor(m) { document.body.innerHTML = '<div class="boot"><div class="spin"></div><span id="yk">' + esc(m) + '</span></div><div id="toast"></div>'; }
@@ -496,7 +497,7 @@ var LOGO = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAQDAwMDAgQDA
 
   /* ================= kabuk ================= */
   function kabuk() {
-    document.body.innerHTML = '<div class="top">' + logoImg('') + '<span class="ttl">Personel Yönetim Sistemi</span><span class="nav"><button id="n_ozet">Genel Bakış</button><button id="n_firma">Firmalar</button></span><span class="sp"></span>' +
+    document.body.innerHTML = '<div class="top">' + logoImg('') + '<span class="ttl">Personel Yönetim Sistemi</span><span class="nav"><button id="n_ozet">Genel Bakış</button><button id="n_firma">Firmalar</button>' + (yonetici() ? '<button id="n_kmp">KARMA Personel</button>' : '') + '</span><span class="sp"></span>' +
       '<a class="btn btn-sm" id="t_osgb" href="https://ozgunandic-ai.github.io/karmaosgb" target="_blank" rel="noopener noreferrer">OSGB Doküman Yönetimi ↗</a>' +
       '<span class="who">' + esc(App.kullanici.adSoyad || App.kullanici.kullanici) + (yonetici() ? ' · yönetici' : '') + '</span>' +
       (yonetici() ? '<button class="btn btn-sm" id="t_ayar">Bağlantı kodu</button>' : '') +
@@ -504,13 +505,15 @@ var LOGO = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAQDAwMDAgQDA
     $('#t_cik').onclick = cikis;
     $('#n_ozet').onclick = function () { App.firma = null; App.ana = 'ozet'; render(); };
     $('#n_firma').onclick = function () { App.firma = null; App.ana = 'firmalar'; render(); };
+    if ($('#n_kmp')) $('#n_kmp').onclick = function () { App.firma = null; App.ana = 'kmp'; render(); };
     if (yonetici()) $('#t_ayar').onclick = baglantiKodu;
     render();
   }
   function render() {
-    var oz = !App.firma && App.ana !== 'firmalar';
-    if ($('#n_ozet')) { $('#n_ozet').className = oz ? 'on' : ''; $('#n_firma').className = oz ? '' : 'on'; }
-    if (App.firma) viewFirma(); else if (oz) viewOzet(); else viewFirmalar();
+    var kmp = yonetici() && !App.firma && App.ana === 'kmp';
+    var oz = !App.firma && App.ana !== 'firmalar' && !kmp;
+    if ($('#n_ozet')) { $('#n_ozet').className = oz ? 'on' : ''; $('#n_firma').className = (oz || kmp) ? '' : 'on'; if ($('#n_kmp')) $('#n_kmp').className = kmp ? 'on' : ''; }
+    if (App.firma) viewFirma(); else if (kmp) viewKmp(); else if (oz) viewOzet(); else viewFirmalar();
     window.scrollTo(0, 0);
   }
 
@@ -552,7 +555,7 @@ var LOGO = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAQDAwMDAgQDA
   function viewOzet() {
     if (!App.src) {
       $('#wrap').innerHTML = '<div class="boot" style="height:220px"><div class="spin"></div><span>OSGB eğitim ve sağlık kayıtları okunuyor… <span id="srcIlerle"></span></span></div>';
-      srcKayitlari().then(function () { if (!App.firma && App.ana !== 'firmalar') viewOzet(); }).catch(function (e) {
+      srcKayitlari().then(function () { if (!App.firma && App.ana !== 'firmalar' && App.ana !== 'kmp') viewOzet(); }).catch(function (e) {
         $('#wrap').innerHTML = '<div class="card"><div class="empty">OSGB kayıtları okunamadı: ' + esc(e.message) + '<br><br><button class="btn btn-ghost" id="td">Tekrar dene</button></div></div>'; $('#td').onclick = viewOzet;
       });
       return;
@@ -594,6 +597,317 @@ var LOGO = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAQDAwMDAgQDA
         };
       }
     });
+  }
+
+  /* ==========================================================================
+     KARMA PERSONEL (yalnızca yönetici): kendi personelimiz, evrakları ve yıllık izin takibi
+     Veri: data/karmapersonel.json · Dosyalar: data/karmapersonel_dosya/<personelId>/...
+     ========================================================================== */
+  var KMP_YOL = 'data/karmapersonel.json';
+  var KMP_BELGELER = ['İşe giriş belgesi', 'Kimlik belgesi', 'İkâmetgah belgesi', 'Nüfus kayıt belgesi', 'Adli sicil belgesi', 'Diploma', 'Sertifika', 'İş güvenliği eğitim belgesi', 'Sağlık raporu', 'İSG talimat', 'KKD zimmet', 'İşten çıkış belgesi'];
+  var KMP_SEKME = 'aktif', KMP_ARA = '';
+
+  function kmpYukle(zorla) {
+    if (App.kmp && !zorla) return Promise.resolve(App.kmp);
+    return dstGet(KMP_YOL).then(function (d) { App.kmp = d && d.veri ? d.veri : { personel: [] }; App.kmp.personel = App.kmp.personel || []; return App.kmp; });
+  }
+  function kmpListe() { return (App.kmp && App.kmp.personel) || []; }
+  function kmpBul(id) { return kmpListe().filter(function (p) { return p.id === id; })[0]; }
+  function kmpKaydet(id, degistir, msg) {
+    return dstUpdate(KMP_YOL, function (doc) {
+      doc = doc || { personel: [] }; doc.personel = doc.personel || [];
+      var p = doc.personel.filter(function (x) { return x.id === id; })[0];
+      if (!p) { p = { id: id, olusturma: new Date().toISOString(), olusturan: App.kullanici.kullanici, belgeler: [], izinler: [] }; doc.personel.push(p); }
+      degistir(p); doc.guncelleme = new Date().toISOString(); return doc;
+    }, msg || 'KARMA Personel: kayıt güncellendi').then(function (doc) { App.kmp = doc; return doc; });
+  }
+  function kmpAdSoyad(p) { return ((p.ad || '') + ' ' + (p.soyad || '')).trim(); }
+  function isoStr(d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+  function yasOn(dogum, iso) {
+    if (!dogum) return null;
+    var a = dogum.split('-').map(Number), b = iso.split('-').map(Number), y = b[0] - a[0];
+    if (b[1] < a[1] || (b[1] === a[1] && b[2] < a[2])) y--;
+    return y;
+  }
+
+  /* ---- resmî tatiller (hafta tatili izin süresinden sayılmaz; resmî tatil 1 gün, arife/28 Ekim yarım gün) ---- */
+  var TATIL_SABIT = { '01-01': 1, '04-23': 1, '05-01': 1, '05-19': 1, '07-15': 1, '08-30': 1, '10-28': 0.5, '10-29': 1 };
+  /* [Ramazan Bayramı 1. gün, 3 gün], [Kurban Bayramı 1. gün, 4 gün] — 2028 ve sonrası takvim hesabına dayalı tahmindir */
+  var TATIL_DINI = {
+    2020: [['05-24', 3], ['07-31', 4]], 2021: [['05-13', 3], ['07-20', 4]], 2022: [['05-02', 3], ['07-09', 4]], 2023: [['04-21', 3], ['06-28', 4]],
+    2024: [['04-10', 3], ['06-16', 4]], 2025: [['03-30', 3], ['06-06', 4]], 2026: [['03-20', 3], ['05-27', 4]], 2027: [['03-09', 3], ['05-16', 4]],
+    2028: [['02-27', 3], ['05-05', 4]], 2029: [['02-16', 3], ['04-24', 4]], 2030: [['02-05', 3], ['04-14', 4]]
+  };
+  var TATIL_ONBELLEK = {};
+  function tatilHarita(yil) {
+    if (TATIL_ONBELLEK[yil]) return TATIL_ONBELLEK[yil];
+    var h = {}, ekle = function (iso, v) { h[iso] = Math.max(h[iso] || 0, v); };
+    Object.keys(TATIL_SABIT).forEach(function (k) { ekle(yil + '-' + k, TATIL_SABIT[k]); });
+    (TATIL_DINI[yil] || []).forEach(function (b) {
+      var bas = new Date(yil + '-' + b[0] + 'T00:00:00');
+      var ar = new Date(bas); ar.setDate(ar.getDate() - 1); ekle(isoStr(ar), 0.5);
+      for (var i = 0; i < b[1]; i++) { var d = new Date(bas); d.setDate(d.getDate() + i); ekle(isoStr(d), 1); }
+    });
+    return (TATIL_ONBELLEK[yil] = h);
+  }
+  /* başlangıç–bitiş (ikisi de dahil) arasında izinden düşülecek gün sayısı */
+  function izinGunHesap(bas, bit, duzen) {
+    var s = { gun: 0, hafta: 0, resmi: 0, tatilVerisiYok: false };
+    if (!bas || !bit || bit < bas) return s;
+    var d = new Date(bas + 'T00:00:00'), son = new Date(bit + 'T00:00:00'), n = 0;
+    while (d <= son && n++ < 800) {
+      var dow = d.getDay(), yil = d.getFullYear();
+      if (!TATIL_DINI[yil]) s.tatilVerisiYok = true;
+      if (dow === 0 || (duzen === 'cts-pazar' && dow === 6)) s.hafta++;
+      else { var t = tatilHarita(yil)[isoStr(d)] || 0; s.resmi += t; s.gun += 1 - t; }
+      d.setDate(d.getDate() + 1);
+    }
+    return s;
+  }
+
+  /* ---- yıllık izin hakkı (4857 s. İş Kanunu m.53) ----
+     Her tamamlanan hizmet yılı için hak doğar: ilk 5 yıl (dahil) 14, 5–15 yıl arası 20, 15 yıl ve üzeri 26 gün;
+     hak kazanma tarihinde 18 yaşından küçük veya 50 ve daha yukarı yaştakiler için en az 20 gün. */
+  function yillikHak(n, yas) {
+    var g = n >= 15 ? 26 : n > 5 ? 20 : 14;
+    if (yas != null && (yas < 18 || yas >= 50)) g = Math.max(g, 20);
+    return g;
+  }
+  function izinOzet(p) {
+    var bg = bugun(), yil = bg.slice(0, 4), haklar = [], n = 1, o = { haklar: haklar, sonraki: null };
+    if (p.iseGiris) {
+      while (n < 80) { var t = isoEkle(p.iseGiris, n); if (t > bg) break; var yas = yasOn(p.dogum, t); haklar.push({ n: n, tarih: t, yas: yas, gun: yillikHak(n, yas), kul: 0, kalan: 0 }); n++; }
+      var st = isoEkle(p.iseGiris, n); o.sonraki = { tarih: st, gun: yillikHak(n, yasOn(p.dogum, st)) };
+    }
+    var kul = 0, buYilKul = 0;
+    (p.izinler || []).forEach(function (i) { if (i.tur === 'diger') return; var g = Number(i.gun) || 0; kul += g; if (String(i.baslangic || '').slice(0, 4) === yil) buYilKul += g; });
+    var rest = kul;
+    haklar.forEach(function (h) { var k = Math.min(h.gun, Math.max(rest, 0)); h.kul = k; rest -= k; h.kalan = h.gun - k; });
+    o.toplam = haklar.reduce(function (a, h) { return a + h.gun; }, 0);
+    o.kullanilan = kul; o.kalan = o.toplam - kul;
+    o.buYilHak = haklar.filter(function (h) { return h.tarih.slice(0, 4) === yil; }).reduce(function (a, h) { return a + h.gun; }, 0);
+    o.buYilKul = buYilKul;
+    var son = haklar[haklar.length - 1]; o.sonHakKalan = son ? son.kalan : null;
+    o.hizmetYil = haklar.length;
+    return o;
+  }
+  function gunTxt(x) { return (Math.round(x * 2) / 2).toString().replace('.', ','); }
+  function belgeSay(p) { var s = {}; (p.belgeler || []).forEach(function (b) { s[b.tur] = 1; }); return Object.keys(s).length; }
+
+  /* ---- ana görünüm ---- */
+  function viewKmp() {
+    if (!yonetici()) { App.ana = 'ozet'; return render(); }
+    if (!App.kmp) {
+      $('#wrap').innerHTML = '<div class="boot" style="height:220px"><div class="spin"></div><span>KARMA personel kayıtları okunuyor…</span></div>';
+      kmpYukle().then(function () { if (App.ana === 'kmp' && !App.firma) viewKmp(); }).catch(function (e) {
+        $('#wrap').innerHTML = '<div class="card"><div class="empty">Kayıtlar okunamadı: ' + esc(e.message) + '<br><br><button class="btn btn-ghost" id="kTd">Tekrar dene</button></div></div>'; $('#kTd').onclick = viewKmp;
+      });
+      return;
+    }
+    var tum = kmpListe().slice().sort(function (a, b) { return kmpAdSoyad(a).localeCompare(kmpAdSoyad(b), 'tr'); });
+    var akt = tum.filter(function (p) { return !p.ayrildi; }), pas = tum.filter(function (p) { return p.ayrildi; }), q = trNorm(KMP_ARA);
+    var suz = function (l) { return l.filter(function (p) { return !q || trNorm(kmpAdSoyad(p) + ' ' + (p.gorev || '') + ' ' + (p.tc || '')).indexOf(q) >= 0; }); };
+    var h = '<div class="phead"><div><h1>KARMA Personel</h1><p class="psub">' + akt.length + ' aktif · ' + pas.length + ' pasif personel · yalnızca yöneticiler görür</p></div>' +
+      '<div class="pact"><input type="text" class="search" id="kAra" placeholder="Personel ara…" value="' + esc(KMP_ARA) + '"><button class="btn btn-ghost" id="kYenile" title="Kayıtları GitHub’dan yeniden oku">Yenile</button><button class="btn btn-primary" id="kYeni">+ Personel oluştur</button></div></div>' +
+      '<div class="tabs"><button class="tab' + (KMP_SEKME === 'aktif' ? ' on' : '') + '" data-kt="aktif">Aktif personel (' + akt.length + ')</button><button class="tab' + (KMP_SEKME === 'pasif' ? ' on' : '') + '" data-kt="pasif">Pasif personel (' + pas.length + ')</button><button class="tab' + (KMP_SEKME === 'izin' ? ' on' : '') + '" data-kt="izin">İzin süresi</button></div>';
+    if (KMP_SEKME === 'izin') {
+      var l = suz(akt);
+      h += '<div class="card"><div class="card-b tight">' + (!l.length ? '<div class="empty">' + (akt.length ? 'Aramanızla eşleşen personel yok.' : 'Aktif personel yok.') + '</div>' :
+        '<table class="tbl"><thead><tr><th>Personel</th><th>İşe giriş</th><th>Hizmet</th><th>Toplam hak</th><th>Kullanılan</th><th>Toplam kalan</th><th>Bu yıl hak</th><th>Bu yıl kullanılan</th><th></th></tr></thead><tbody>' + l.map(function (p) {
+          var o = izinOzet(p), eksik = !p.iseGiris || !p.dogum;
+          return '<tr class="clk" data-iz="' + esc(p.id) + '"><td><strong>' + esc(kmpAdSoyad(p)) + '</strong></td><td>' + (p.iseGiris ? trT(p.iseGiris) : '<span class="tag warn">Tarih yok</span>') + '</td><td>' + (eksik ? '—' : o.hizmetYil + ' yıl') + '</td>' +
+            '<td>' + gunTxt(o.toplam || 0) + ' gün</td><td>' + gunTxt(o.kullanilan) + ' gün</td><td><span class="tag ' + (o.kalan < 0 ? 'bad' : o.kalan === 0 ? '' : 'ok') + '">' + gunTxt(o.kalan) + ' gün</span></td>' +
+            '<td>' + gunTxt(o.buYilHak) + ' gün</td><td>' + gunTxt(o.buYilKul) + ' gün</td><td><button class="btn btn-ghost btn-sm">İzinler</button></td></tr>';
+        }).join('') + '</tbody></table>') + '</div></div>' +
+        '<p class="small">Hak, işe giriş tarihinin her yıldönümünde doğar (ilk 5 yıl 14, 5–15 yıl arası 20, 15 yıl ve üzeri 26 gün; hak kazanma tarihinde 18 yaşından küçük veya 50 yaşında ve üstü olanlar için en az 20 gün). Hafta tatili, ulusal bayram ve genel tatiller izin süresinden sayılmaz. Kullanılan izin, en eski haktan başlanarak düşülür.</p>';
+    } else {
+      var lst = suz(KMP_SEKME === 'pasif' ? pas : akt), pa = KMP_SEKME === 'pasif';
+      h += '<div class="card"><div class="card-b tight">' + (!lst.length ? '<div class="empty">' + ((pa ? pas : akt).length ? 'Aramanızla eşleşen personel yok.' : pa ? 'Pasif personel yok. İşten ayrılanlar burada listelenir.' : 'Henüz personel yok. “Personel oluştur” ile ekleyin.') + '</div>' :
+        '<table class="tbl kmp-mat"><thead><tr><th>Ad soyad</th><th>Görev</th><th>İşe giriş</th>' + (pa ? '<th>Ayrılma</th>' : '<th>Yaş</th>') + KMP_BELGELER.map(function (t) { return '<th class="c" title="' + esc(t) + '">' + esc(t) + '</th>'; }).join('') + '</tr></thead><tbody>' + lst.map(function (p) {
+          var ys = yasOn(p.dogum, bugun()), say = {}; (p.belgeler || []).forEach(function (b) { say[b.tur] = (say[b.tur] || 0) + 1; });
+          return '<tr class="clk" data-kp="' + esc(p.id) + '"><td><strong>' + esc(kmpAdSoyad(p)) + '</strong></td><td>' + esc(p.gorev || '') + '</td><td>' + trT(p.iseGiris) + '</td>' +
+            (pa ? '<td>' + trT(p.ayrilmaTarihi) + '</td>' : '<td>' + (ys == null ? '—' : ys) + '</td>') +
+            KMP_BELGELER.map(function (t) { return '<td class="c" title="' + esc(t + (say[t] ? ' — ' + say[t] + ' dosya yüklü' : ' — yok')) + '"><span class="' + (say[t] ? 'kmp-var' : 'kmp-yok') + '">' + (say[t] ? '✔' : '✖') + '</span></td>'; }).join('') + '</tr>';
+        }).join('') + '</tbody></table>') + '</div></div>';
+    }
+    $('#wrap').innerHTML = h;
+    $('#kAra').oninput = function () { KMP_ARA = this.value; var pos = this.selectionStart; viewKmp(); var a = $('#kAra'); a.focus(); a.setSelectionRange(pos, pos); };
+    $('#kYenile').onclick = function () { App.kmp = null; viewKmp(); };
+    $('#kYeni').onclick = function () { kmpModal(null); };
+    $$('[data-kt]').forEach(function (b) { b.onclick = function () { KMP_SEKME = b.getAttribute('data-kt'); viewKmp(); }; });
+    $$('[data-kp]').forEach(function (r) { r.onclick = function () { kmpModal(r.getAttribute('data-kp')); }; });
+    $$('[data-iz]').forEach(function (r) { r.onclick = function () { izinModal(r.getAttribute('data-iz')); }; });
+  }
+
+  /* ---- personel oluştur / düzenle ---- */
+  function kmpBelgeBolum(p) {
+    var var_ = {}; (p.belgeler || []).forEach(function (b) { var_[b.tur] = (var_[b.tur] || 0) + 1; });
+    var h = '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">' + KMP_BELGELER.map(function (t) { return '<span class="tag ' + (var_[t] ? 'ok' : 'bad') + '">' + (var_[t] ? '✔ ' : '✖ ') + esc(t) + '</span>'; }).join('') + '</div>';
+    var l = (p.belgeler || []).slice().sort(function (a, b) { return KMP_BELGELER.indexOf(a.tur) - KMP_BELGELER.indexOf(b.tur) || String(b.tarih || '').localeCompare(String(a.tarih || '')); });
+    h += l.length ? l.map(function (b) {
+      return '<div class="list-line"><span><strong>' + esc(b.tur) + '</strong>' + (b.tarih ? ' · ' + trT(b.tarih) : '') + ' <span class="small">' + esc(b.dosya && b.dosya.ad || '') + (b.aciklama ? ' · ' + esc(b.aciklama) : '') + '</span></span><span>' +
+        '<button class="btn btn-ghost btn-sm" data-bac="' + esc(b.id) + '">Aç</button> <button class="btn btn-danger btn-sm" data-bsil="' + esc(b.id) + '">Sil</button></span></div>';
+    }).join('') : '<p class="small" style="margin-top:0">Henüz evrak yüklenmedi.</p>';
+    h += '<div class="grid2" style="margin-top:10px"><div class="field"><label>Evrak türü *</label><select id="kb_tur">' + KMP_BELGELER.map(function (t) { return '<option>' + esc(t) + '</option>'; }).join('') + '</select></div>' +
+      '<div class="field"><label>Belge tarihi</label><input type="date" id="kb_t"></div></div>' +
+      '<div class="field"><label>Açıklama (isteğe bağlı)</label><input type="text" id="kb_a" placeholder="Ör. Lisans diploması"></div>' +
+      '<div class="field"><label>Dosya (PDF / görsel / Word, en fazla 8 MB) *</label><input type="file" id="kb_f" accept=".pdf,image/*,.doc,.docx"></div><button class="btn btn-ghost btn-sm" id="kb_ekle" style="margin-bottom:10px">Evrakı yükle</button>';
+    return h;
+  }
+  function kmpDosyaYukle(pid, file) {
+    var id = uid('kd'), yol = 'data/karmapersonel_dosya/' + pid + '/' + id + '_' + guvenliAd(file.name);
+    return dstDosyaYaz(yol, file).then(function () { return { id: id, dosya: { yol: yol, ad: file.name, mime: file.type, boyut: file.size } }; });
+  }
+  function kmpDosyaKontrol(file) {
+    if (!file) return 'Dosya seçin.';
+    if (file.size > MAX_DOSYA) return 'Dosya çok büyük (en fazla 8 MB).';
+    return '';
+  }
+
+  function kmpModal(pid) {
+    var p = pid ? kmpBul(pid) : null; if (pid && !p) return;
+    var yeni = !p; if (yeni) p = { id: uid('kmp'), ad: '', soyad: '', gorev: '', tc: '', dogum: '', iseGiris: '', acil: {}, belgeler: [], izinler: [] };
+    var a = p.acil || {};
+    var g = '<fieldset><legend>Personel bilgileri</legend><div class="grid2"><div class="field"><label>Adı *</label><input type="text" id="k_ad" value="' + esc(p.ad) + '"></div><div class="field"><label>Soyadı *</label><input type="text" id="k_soyad" value="' + esc(p.soyad) + '"></div>' +
+      '<div class="field"><label>Görevi *</label><input type="text" id="k_gorev" value="' + esc(p.gorev) + '"></div><div class="field"><label>TC kimlik no *</label><input type="text" id="k_tc" inputmode="numeric" maxlength="11" value="' + esc(p.tc) + '"></div>' +
+      '<div class="field"><label>Doğum tarihi *</label><input type="date" id="k_dogum" value="' + esc(p.dogum) + '"></div><div class="field"><label>İşe giriş tarihi *</label><input type="date" id="k_giris" value="' + esc(p.iseGiris) + '"></div></div>' +
+      '<div class="field"><label>Haftalık çalışma düzeni (izin günü hesabı için)</label><select id="k_duzen"><option value="pazar"' + (p.duzen !== 'cts-pazar' ? ' selected' : '') + '>Pazar hafta tatili (Cumartesi çalışılır)</option><option value="cts-pazar"' + (p.duzen === 'cts-pazar' ? ' selected' : '') + '>Cumartesi ve Pazar hafta tatili</option></select></div></fieldset>' +
+      '<fieldset><legend>Acil durumda ilk ulaşılacak kişi</legend><div class="field"><label>Adı soyadı</label><input type="text" id="k_aad" value="' + esc(a.ad || '') + '"></div>' +
+      '<div class="grid2"><div class="field"><label>Yakınlık derecesi</label><input type="text" id="k_ayak" placeholder="Ör. Eşi, annesi" value="' + esc(a.yakinlik || '') + '"></div><div class="field"><label>Telefon numarası</label><input type="text" id="k_atel" inputmode="tel" value="' + esc(a.tel || '') + '"></div></div></fieldset>';
+    if (!yeni) {
+      g += '<fieldset><legend>Evraklar</legend><div id="kBelge">' + kmpBelgeBolum(p) + '</div></fieldset>' +
+        '<fieldset><legend>İzin</legend><p class="small" style="margin-top:0">Yıllık izin hakkı, kullanılan izinler ve izin raporları.</p><button class="btn btn-ghost btn-sm" id="kIzin" style="margin-bottom:10px">İzin süresi ve izin raporları</button></fieldset>' +
+        '<fieldset><legend>Çalışma durumu</legend><div id="kDurum"></div></fieldset>';
+    }
+    modal({
+      baslik: yeni ? 'Personel oluştur' : kmpAdSoyad(p), wide: true, govde: g, onay: yeni ? 'Personeli oluştur' : 'Bilgileri kaydet',
+      kapandi: function () { if (App.ana === 'kmp' && !App.firma) viewKmp(); },
+      kaydet: function (kapat, ov) {
+        var v = { ad: $('#k_ad', ov).value.trim(), soyad: $('#k_soyad', ov).value.trim(), gorev: $('#k_gorev', ov).value.trim(), tc: $('#k_tc', ov).value.replace(/\s/g, ''), dogum: $('#k_dogum', ov).value, iseGiris: $('#k_giris', ov).value, duzen: $('#k_duzen', ov).value,
+          acil: { ad: $('#k_aad', ov).value.trim(), yakinlik: $('#k_ayak', ov).value.trim(), tel: $('#k_atel', ov).value.trim() } };
+        if (!v.ad || !v.soyad) return hataGoster(ov, 'Ad ve soyad girin.');
+        if (!v.gorev) return hataGoster(ov, 'Görevini girin.');
+        if (!/^\d{11}$/.test(v.tc)) return hataGoster(ov, 'TC kimlik no 11 haneli rakamlardan oluşmalıdır.');
+        if (kmpListe().some(function (x) { return x.id !== p.id && x.tc === v.tc; })) return hataGoster(ov, 'Bu TC kimlik no ile kayıtlı başka bir personel var.');
+        if (!v.dogum || !v.iseGiris) return hataGoster(ov, 'Doğum ve işe giriş tarihlerini girin (izin hesabı için gerekli).');
+        return kmpKaydet(p.id, function (x) { Object.assign(x, v); x.belgeler = x.belgeler || []; x.izinler = x.izinler || []; }, 'KARMA Personel: ' + v.ad + ' ' + v.soyad).then(function () {
+          kapat(); toast(yeni ? 'Personel oluşturuldu; şimdi evraklarını yükleyebilirsiniz' : 'Kaydedildi', 'ok');
+          if (yeni) kmpModal(p.id);
+        });
+      },
+      bagla: function (ov) {
+        if (yeni) return;
+        var guncel = function () { return kmpBul(p.id) || p; };
+        function belgeCiz() {
+          $('#kBelge', ov).innerHTML = kmpBelgeBolum(guncel());
+          $$('[data-bac]', ov).forEach(function (b) { b.onclick = function () { var d = (guncel().belgeler || []).filter(function (x) { return x.id === b.getAttribute('data-bac'); })[0]; if (d && d.dosya) dstDosyaAc(d.dosya); }; });
+          $$('[data-bsil]', ov).forEach(function (b) {
+            b.onclick = function () {
+              var id = b.getAttribute('data-bsil'), d = (guncel().belgeler || []).filter(function (x) { return x.id === id; })[0]; if (!d || !confirm('“' + d.tur + '” belgesi silinsin mi? Geri alınamaz.')) return;
+              b.disabled = true;
+              kmpKaydet(p.id, function (x) { x.belgeler = (x.belgeler || []).filter(function (y) { return y.id !== id; }); }, 'KARMA Personel: evrak silindi')
+                .then(function () { return d.dosya ? dstDosyaSil(d.dosya.yol) : null; }).then(function () { toast('Evrak silindi', 'ok'); belgeCiz(); }).catch(function (e) { b.disabled = false; toast('Silinemedi: ' + e.message, 'err'); });
+            };
+          });
+          $('#kb_ekle', ov).onclick = function () {
+            var btn = this, f = $('#kb_f', ov).files[0], hata = kmpDosyaKontrol(f); if (hata) { toast(hata, 'err'); return; }
+            var tur = $('#kb_tur', ov).value, tarih = $('#kb_t', ov).value, ac = $('#kb_a', ov).value.trim(), yuk;
+            btn.disabled = true; btn.textContent = 'Yükleniyor…';
+            kmpDosyaYukle(p.id, f).then(function (r) { yuk = r; return kmpKaydet(p.id, function (x) { (x.belgeler = x.belgeler || []).push({ id: r.id, tur: tur, tarih: tarih, aciklama: ac, dosya: r.dosya, yukleyen: App.kullanici.kullanici, zaman: new Date().toISOString() }); }, 'KARMA Personel: evrak yüklendi'); })
+              .then(function () { toast('Evrak yüklendi', 'ok'); belgeCiz(); }).catch(function (e) { if (yuk) dstDosyaSil(yuk.dosya.yol).catch(function () { }); btn.disabled = false; btn.textContent = 'Evrakı yükle'; toast('Yüklenemedi: ' + e.message, 'err'); });
+          };
+        }
+        function durumCiz() {
+          var c = guncel(), el = $('#kDurum', ov);
+          if (!c.ayrildi) {
+            el.innerHTML = '<p class="small" style="margin-top:0">Durum: <span class="tag ok">Aktif</span> İşten ayrılan personel pasife taşınır; kayıtları ve evrakları silinmez.</p>' +
+              '<div class="grid2"><div class="field"><label>İşten ayrılma tarihi</label><input type="date" id="kd_t" value="' + bugun() + '"></div><div class="field"><label>Not (isteğe bağlı)</label><input type="text" id="kd_n" placeholder="Ör. İstifa"></div></div><button class="btn btn-danger btn-sm" id="kd_pasif" style="margin-bottom:10px">İşten ayrıldı — pasife taşı</button>';
+            $('#kd_pasif', ov).onclick = function () {
+              var t = $('#kd_t', ov).value, n = $('#kd_n', ov).value.trim(); if (!t) { toast('Ayrılma tarihini girin', 'err'); return; }
+              if (c.iseGiris && t < c.iseGiris) { toast('Ayrılma tarihi işe girişten önce olamaz', 'err'); return; }
+              this.disabled = true;
+              kmpKaydet(p.id, function (x) { x.ayrildi = true; x.ayrilmaTarihi = t; x.ayrilmaNotu = n; }, 'KARMA Personel: pasife alındı').then(function () { toast('Personel pasife taşındı. “İşten çıkış belgesi”ni yüklemeyi unutmayın.', 'ok'); durumCiz(); }).catch(function (e) { toast('Kaydedilemedi: ' + e.message, 'err'); });
+            };
+          } else {
+            el.innerHTML = '<p class="small" style="margin-top:0">Durum: <span class="tag bad">Pasif</span> Ayrılma tarihi: ' + trT(c.ayrilmaTarihi) + (c.ayrilmaNotu ? ' · ' + esc(c.ayrilmaNotu) : '') + '</p><button class="btn btn-ghost btn-sm" id="kd_aktif" style="margin-bottom:10px">Yeniden aktif yap</button>';
+            $('#kd_aktif', ov).onclick = function () {
+              if (!confirm('Personel yeniden aktif yapılsın mı?')) return; this.disabled = true;
+              kmpKaydet(p.id, function (x) { x.ayrildi = false; delete x.ayrilmaTarihi; delete x.ayrilmaNotu; }, 'KARMA Personel: aktife alındı').then(function () { toast('Personel aktif', 'ok'); durumCiz(); }).catch(function (e) { toast('Kaydedilemedi: ' + e.message, 'err'); });
+            };
+          }
+        }
+        belgeCiz(); durumCiz();
+        $('#kIzin', ov).onclick = function () { izinModal(p.id); };
+      }
+    });
+  }
+
+  /* ---- izin süresi modülü ---- */
+  function izinModal(pid) {
+    var p0 = kmpBul(pid); if (!p0) return;
+    var guncel = function () { return kmpBul(pid) || p0; };
+    modal({
+      baslik: 'İzin süresi · ' + kmpAdSoyad(p0), wide: true, onay: false, govde: '<div id="izBody"></div>',
+      kapandi: function () { if (App.ana === 'kmp' && !App.firma) viewKmp(); },
+      bagla: function (ov) { govdeCiz(ov); }
+    });
+    function govdeCiz(ov) {
+      var p = guncel(), o = izinOzet(p), el = $('#izBody', ov), eksik = !p.iseGiris || !p.dogum;
+      var h = '';
+      if (eksik) h += '<div class="note">İzin hakkının hesaplanması için personelin <b>doğum</b> ve <b>işe giriş</b> tarihi girilmelidir.</div>';
+      h += '<div class="stats"><div class="stat"><b>' + gunTxt(o.toplam || 0) + '</b><span>Toplam hak edilen izin (gün)</span></div><div class="stat"><b>' + gunTxt(o.kullanilan) + '</b><span>Kullanılan izin (gün)</span></div>' +
+        '<div class="stat"><b style="color:' + (o.kalan < 0 ? 'var(--bad)' : 'var(--ok)') + '">' + gunTxt(o.kalan) + '</b><span>Toplam kalan izin (gün)</span></div>' +
+        '<div class="stat"><b>' + gunTxt(o.buYilHak) + '</b><span>Bu yıl hak kazanılan (gün)</span></div><div class="stat"><b>' + gunTxt(o.buYilKul) + '</b><span>Bu yıl kullanılan (gün)</span></div>' +
+        '<div class="stat"><b>' + (o.sonHakKalan == null ? '—' : gunTxt(o.sonHakKalan)) + '</b><span>Son hak edilen yılın kalanı (gün)</span></div></div>';
+      if (!eksik) {
+        h += '<fieldset><legend>Hizmet yılına göre hak ve kullanım</legend>' + (o.haklar.length ? '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Hizmet yılı</th><th>Hak kazanma</th><th>Yaş</th><th>Hak</th><th>Kullanılan</th><th>Kalan</th></tr></thead><tbody>' +
+          o.haklar.map(function (x) { return '<tr><td>' + x.n + '. yıl</td><td>' + trT(x.tarih) + '</td><td>' + (x.yas == null ? '—' : x.yas) + '</td><td>' + x.gun + ' gün</td><td>' + gunTxt(x.kul) + ' gün</td><td><span class="tag ' + (x.kalan > 0 ? 'ok' : '') + '">' + gunTxt(x.kalan) + ' gün</span></td></tr>'; }).join('') + '</tbody></table></div>' :
+          '<p class="small" style="margin-top:0">Henüz bir yıllık hizmet süresi dolmadığı için izin hakkı doğmamış.</p>') +
+          (o.sonraki ? '<p class="small">Sonraki izin hakkı: <b>' + trT(o.sonraki.tarih) + '</b> tarihinde ' + o.sonraki.gun + ' gün.</p>' : '') + '</fieldset>';
+      }
+      var iz = (p.izinler || []).slice().sort(function (a, b) { return String(b.baslangic).localeCompare(String(a.baslangic)); });
+      h += '<fieldset><legend>İzin kayıtları ve raporları</legend>' + (iz.length ? iz.map(function (i) {
+        return '<div class="list-line"><span><strong>' + trT(i.baslangic) + ' – ' + trT(i.bitis) + '</strong> · ' + gunTxt(Number(i.gun) || 0) + ' gün ' + (i.tur === 'diger' ? '<span class="tag">İzinden düşmez</span>' : '<span class="tag red">Yıllık izin</span>') +
+          '<span class="small"> ' + esc(i.aciklama || '') + (i.dosya ? ' · ' + esc(i.dosya.ad) : '') + '</span></span><span>' + (i.dosya ? '<button class="btn btn-ghost btn-sm" data-iac="' + esc(i.id) + '">Rapor</button> ' : '') +
+          '<button class="btn btn-danger btn-sm" data-isil="' + esc(i.id) + '">Sil</button></span></div>';
+      }).join('') : '<p class="small" style="margin-top:0">Henüz izin kaydı yok.</p>') + '</fieldset>';
+      h += '<fieldset><legend>İzin ekle</legend><div class="grid2"><div class="field"><label>Başlangıç *</label><input type="date" id="iz_b"></div><div class="field"><label>Bitiş (son izin günü) *</label><input type="date" id="iz_s"></div>' +
+        '<div class="field"><label>İzin türü</label><select id="iz_tur"><option value="yillik">Yıllık izin (hakkından düşer)</option><option value="diger">Diğer izin / rapor (hakkından düşmez)</option></select></div>' +
+        '<div class="field"><label>İzinden düşecek gün *</label><input type="text" id="iz_g" inputmode="decimal"><div class="hint" id="iz_ipucu">Tarihleri seçince hafta tatili ve resmî tatiller çıkarılarak hesaplanır; gerekirse düzeltebilirsiniz.</div></div></div>' +
+        '<div class="field"><label>Açıklama</label><input type="text" id="iz_a" placeholder="İsteğe bağlı"></div><div class="field"><label>İzin raporu / dilekçe dosyası (PDF / görsel / Word, en fazla 8 MB)</label><input type="file" id="iz_f" accept=".pdf,image/*,.doc,.docx"></div>' +
+        '<button class="btn btn-primary btn-sm" id="iz_ekle" style="margin-bottom:10px">İzni kaydet</button></fieldset>';
+      el.innerHTML = h;
+      var hesapla = function () {
+        var s = izinGunHesap($('#iz_b', ov).value, $('#iz_s', ov).value, p.duzen), ip = $('#iz_ipucu', ov);
+        if ($('#iz_b', ov).value && $('#iz_s', ov).value) {
+          if ($('#iz_s', ov).value < $('#iz_b', ov).value) { ip.textContent = 'Bitiş tarihi başlangıçtan önce olamaz.'; return; }
+          $('#iz_g', ov).value = gunTxt(s.gun);
+          ip.textContent = 'Hesaplanan ' + gunTxt(s.gun) + ' gün — ' + s.hafta + ' hafta tatili ve ' + gunTxt(s.resmi) + ' gün resmî tatil düşüldü.' + (s.tatilVerisiYok ? ' Bu yıl için bayram tarihleri tanımlı değil; gün sayısını kontrol edin.' : '');
+        }
+      };
+      $('#iz_b', ov).onchange = hesapla; $('#iz_s', ov).onchange = hesapla;
+      $$('[data-iac]', ov).forEach(function (b) { b.onclick = function () { var d = (guncel().izinler || []).filter(function (x) { return x.id === b.getAttribute('data-iac'); })[0]; if (d && d.dosya) dstDosyaAc(d.dosya); }; });
+      $$('[data-isil]', ov).forEach(function (b) {
+        b.onclick = function () {
+          var id = b.getAttribute('data-isil'), d = (guncel().izinler || []).filter(function (x) { return x.id === id; })[0]; if (!d || !confirm('Bu izin kaydı silinsin mi? İzin hakkına geri eklenir.')) return;
+          b.disabled = true;
+          kmpKaydet(pid, function (x) { x.izinler = (x.izinler || []).filter(function (y) { return y.id !== id; }); }, 'KARMA Personel: izin silindi')
+            .then(function () { return d.dosya ? dstDosyaSil(d.dosya.yol) : null; }).then(function () { toast('İzin silindi', 'ok'); govdeCiz(ov); }).catch(function (e) { b.disabled = false; toast('Silinemedi: ' + e.message, 'err'); });
+        };
+      });
+      $('#iz_ekle', ov).onclick = function () {
+        var btn = this, b = $('#iz_b', ov).value, s = $('#iz_s', ov).value, gun = parseFloat(String($('#iz_g', ov).value).replace(',', '.')), f = $('#iz_f', ov).files[0], yuk;
+        if (!b || !s) { toast('Başlangıç ve bitiş tarihini girin', 'err'); return; }
+        if (s < b) { toast('Bitiş tarihi başlangıçtan önce olamaz', 'err'); return; }
+        if (!(gun >= 0)) { toast('İzinden düşecek gün sayısını girin', 'err'); return; }
+        if (f) { var hata = kmpDosyaKontrol(f); if (hata) { toast(hata, 'err'); return; } }
+        var tur = $('#iz_tur', ov).value, ac = $('#iz_a', ov).value.trim(); btn.disabled = true; btn.textContent = 'Kaydediliyor…';
+        (f ? kmpDosyaYukle(pid, f) : Promise.resolve(null)).then(function (r) {
+          yuk = r;
+          return kmpKaydet(pid, function (x) { (x.izinler = x.izinler || []).push({ id: r ? r.id : uid('izn'), baslangic: b, bitis: s, gun: gun, tur: tur, aciklama: ac, dosya: r ? r.dosya : null, ekleyen: App.kullanici.kullanici, zaman: new Date().toISOString() }); }, 'KARMA Personel: izin eklendi');
+        }).then(function () { toast('İzin kaydedildi', 'ok'); govdeCiz(ov); }).catch(function (e) { if (yuk) dstDosyaSil(yuk.dosya.yol).catch(function () { }); btn.disabled = false; btn.textContent = 'İzni kaydet'; toast('Kaydedilemedi: ' + e.message, 'err'); });
+      };
+    }
   }
 
   /* ================= firma listesi ================= */
