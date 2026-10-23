@@ -1301,8 +1301,7 @@ var LOGO = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAQDAwMDAgQDA
   function sablonIndir(f) {
     if (!window.XLSX) { toast('Excel kütüphanesi yüklenemedi (internet bağlantısı).', 'err'); return; }
     var b = ['Ad Soyad', 'Görevi', 'İşe Giriş Tarihi'], r1 = ['Ahmet Yılmaz', 'Forklift Operatörü', '15.03.2022'], r2 = ['Ayşe Demir', 'Muhasebe', '01.09.2023'];
-    if (uzmanMi(f)) { b.push('Eğitim Tarihi'); r1.push('20.03.2024'); r2.push(''); }
-    if (hekimMi(f)) { b.push('Muayene Tarihi', 'Muayene Türü'); r1.push('15.03.2022', 'İşe Giriş'); r2.push('10.02.2025', 'Periyodik'); }
+    b.push('Eğitim Tarihi', 'Muayene Tarihi', 'Muayene Türü'); r1.push('20.03.2024', '15.03.2022', 'İşe Giriş'); r2.push('', '10.02.2025', 'Periyodik');   // eğitim/muayene sütunları isteğe bağlı; boş hücreler dikkate alınmaz
     var ws = XLSX.utils.aoa_to_sheet([b, r1, r2]);
     ws['!cols'] = b.map(function () { return { wch: 24 }; });
     var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Personel'); XLSX.writeFile(wb, 'Personel_Sablonu.xlsx');
@@ -1318,10 +1317,10 @@ var LOGO = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAQDAwMDAgQDA
     var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Personel'); XLSX.writeFile(wb, trNorm(firmaAd(f)).slice(0, 30) + '_Personel_Listesi.xlsx');
   }
   function yukleModal(f) {
-    var onizleme = null, izinE = uzmanMi(f), izinS = hekimMi(f), turEksik = 0, bozukTarih = 0;
+    var onizleme = null, izinE = true, izinS = true, turEksik = 0, bozukTarih = 0;   // uzman da hekim de eğitim ve muayene tarihlerini Excel ile yükleyebilir
     modal({
       baslik: 'Personel listesi yükle', wide: true, onay: 'İçe aktar',
-      govde: '<p class="hint" style="margin-top:0">Excel (.xlsx, .xls) veya CSV dosyası. Sütun başlıkları: <b>Ad Soyad</b>, <b>Görevi</b>, <b>İşe Giriş Tarihi</b>' + (izinE ? ', <b>Eğitim Tarihi</b>' : '') + (izinS ? ', <b>Muayene Tarihi</b>, <b>Muayene Türü</b> (İşe Giriş / Periyodik)' : '') + '. Aynı ad soyad kayıtlıysa görevi ve işe giriş tarihi güncellenir. Boş bırakılan tarih hücreleri mevcut eğitim/muayene kayıtlarını <b>silmez ve değiştirmez</b>; kayıtlar yalnızca eklenir. ' + (!izinE ? 'Eğitim sütunları yetkiniz olmadığından yok sayılır. ' : '') + (!izinS ? 'Muayene sütunları yetkiniz olmadığından yok sayılır. ' : '') + '</p>' +
+      govde: '<p class="hint" style="margin-top:0">Excel (.xlsx, .xls) veya CSV dosyası. Sütun başlıkları: <b>Ad Soyad</b>, <b>Görevi</b>, <b>İşe Giriş Tarihi</b>' + (izinE ? ', <b>Eğitim Tarihi</b>' : '') + (izinS ? ', <b>Muayene Tarihi</b>, <b>Muayene Türü</b> (İşe Giriş / Periyodik)' : '') + '. Aynı ad soyad kayıtlıysa görevi ve işe giriş tarihi güncellenir. Eğitim ve muayene sütunları zorunlu değildir: boş sütun veya boş hücreler dikkate alınmaz, mevcut eğitim/muayene kayıtlarını <b>silmez ve değiştirmez</b>; kayıtlar yalnızca eklenir. ' + (!izinE ? 'Eğitim sütunları yetkiniz olmadığından yok sayılır. ' : '') + (!izinS ? 'Muayene sütunları yetkiniz olmadığından yok sayılır. ' : '') + '</p>' +
         '<div class="field"><input type="file" id="x_f" accept=".xlsx,.xls,.csv"></div><div id="x_on"></div>',
       kaydet: function (kapat, ov) {
         if (!onizleme || !onizleme.satirlar.length) return hataGoster(ov, 'Önce geçerli satırlar içeren bir dosya seçin.');
