@@ -204,10 +204,23 @@ var LOGO = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAQDAwMDAgQDA
     });
   }
 
+  /* --- Cloudflare R2 (Pages Functions API) --- */
+  function r2enc(p) { return String(p).split('/').map(encodeURIComponent).join('/'); }
+  function r2(method, yol, o) {
+    o = o || {};
+    var h = { 'X-Karma': '1' };
+    if (o.ctype) h['Content-Type'] = o.ctype;
+    if (o.ifMatch) h['If-Match'] = o.ifMatch;
+    if (o.ifNone) h['If-None-Match'] = '*';
+    return fetch('/api/' + yol, { method: method, cache: 'no-store', credentials: 'same-origin', headers: h, body: o.body }).then(function (r) {
+      if (!r.ok) return r.text().then(function (t) { var j = null; try { j = JSON.parse(t); } catch (x) { } var e = new Error((j && j.hata) || ('Sunucu hatası (' + r.status + ')')); e.status = r.status; throw e; });
+      return r;
+    }, function () { throw new Error('Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edin.'); });
+  }
+
   /* --- kaynak (OSGB Doküman Yönetimi) — yalnız okuma --- */
   function srcDoc(path) {
-    return api(SRC, 'GET', cPath(SRC, 'data/' + path + '.json') + ref(SRC), null, 'text')
-      .then(function (t) { return JSON.parse(t); })
+    return r2('GET', 'src/doc/' + r2enc(path)).then(function (r) { return r.json(); })
       .catch(function (e) { if (e.status === 404) return null; throw e; });
   }
   function pool(items, n, fn) {
@@ -217,22 +230,23 @@ var LOGO = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAQDAwMDAgQDA
     return Promise.all(w).then(function () { return out; });
   }
   function srcList(coll, ilerle) {
-    return api(SRC, 'GET', cPath(SRC, 'data/' + coll) + ref(SRC))
-      .catch(function (e) { if (e.status === 404) return []; throw e; })
-      .then(function (arr) {
-        if (!Array.isArray(arr)) return [];
-        var dos = arr.filter(function (x) { return x.type === 'file' && /\.json$/.test(x.name); });
-        return pool(dos, 6, function (f) {
-          return srcDoc(coll + '/' + f.name.replace(/\.json$/, '')).then(function (o) { if (ilerle) ilerle(); if (o) o._id = f.name.replace(/\.json$/, ''); return o; });
-        }).then(function (l) { return l.filter(Boolean); });
-      });
+    return r2('GET', 'src/list/' + r2enc(coll)).then(function (r) { return r.json(); }).then(function (j) {
+      var ids = (j && j.ids) || [], parcalar = [], i;
+      for (i = 0; i < ids.length; i += 40) parcalar.push(ids.slice(i, i + 40));
+      return pool(parcalar, 3, function (p) {
+        return r2('POST', 'src/getmany', { ctype: 'application/json', body: JSON.stringify({ paths: p.map(function (id) { return coll + '/' + id; }) }) })
+          .then(function (r) { return r.json(); }).then(function (r) {
+            return p.map(function (id) { if (ilerle) ilerle(); var d = r.docs[coll + '/' + id]; if (!d) return null; d._id = id; return d; });
+          });
+      }).then(function (arr) { return [].concat.apply([], arr).filter(Boolean); });
+    });
   }
 
   /* --- hedef (Personel Yönetim verisi) — okuma/yazma --- */
   function dstGet(path) {
-    return api(DST, 'GET', cPath(DST, path) + ref(DST)).then(function (j) {
-      if (!j || j.type !== 'file') return null;
-      return { sha: j.sha, veri: JSON.parse(b64utf8(j.content)) };
+    return r2('GET', 'dst/doc/' + r2enc(path)).then(function (r) {
+      var et = r.headers.get('ETag');
+      return r.json().then(function (j) { return { sha: et, veri: j }; });
     }).catch(function (e) { if (e.status === 404) return null; throw e; });
   }
   function dstUpdate(path, fn, msg) {
@@ -240,27 +254,23 @@ var LOGO = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAQDAwMDAgQDA
     function dene(n) {
       return dstGet(path).then(function (cur) {
         var doc = fn(cur ? cur.veri : null);
-        return api(DST, 'PUT', cPath(DST, path), { message: msg || ('Personel Yönetimi: ' + path), content: utf8b64(JSON.stringify(doc)), branch: DST.branch, sha: cur ? cur.sha : undefined }).then(function () { return doc; });
+        return r2('PUT', 'dst/doc/' + r2enc(path), { ctype: 'application/json', body: JSON.stringify(doc), ifMatch: cur ? cur.sha : null, ifNone: !cur }).then(function () { return doc; });
       }).catch(function (e) {
-        if ((e.status === 409 || e.status === 422) && n < gecik.length) return wait(gecik[n]).then(function () { return dene(n + 1); });
+        if ((e.status === 409 || e.status === 412) && n < gecik.length) return wait(gecik[n]).then(function () { return dene(n + 1); });
         throw e;
       });
     }
     return dene(0);
   }
   function dstDosyaYaz(path, file) {
-    return dosyaB64(file).then(function (b64) {
-      return api(DST, 'PUT', cPath(DST, path), { message: 'Personel Yönetimi: belge yüklendi', content: b64, branch: DST.branch });
-    });
+    return r2('PUT', 'dst/file/' + r2enc(path), { ctype: file.type || 'application/octet-stream', body: file });
   }
   function dstDosyaSil(path) {
-    return api(DST, 'GET', cPath(DST, path) + ref(DST)).then(function (j) {
-      return api(DST, 'DELETE', cPath(DST, path), { message: 'Personel Yönetimi: belge silindi', sha: j.sha, branch: DST.branch });
-    }).catch(function (e) { if (e.status !== 404) throw e; });
+    return r2('DELETE', 'dst/file/' + r2enc(path)).catch(function (e) { if (e.status !== 404) throw e; });
   }
   function dstDosyaAc(d) {
     toast('Belge indiriliyor…');
-    return api(DST, 'GET', cPath(DST, d.yol) + ref(DST), null, 'blob').then(function (b) {
+    return r2('GET', 'dst/file/' + r2enc(d.yol)).then(function (r) { return r.blob(); }).then(function (b) {
       var blob = new Blob([b], { type: d.mime || 'application/octet-stream' }), u = URL.createObjectURL(blob);
       var a = document.createElement('a'); a.href = u; a.target = '_blank'; a.rel = 'noopener';
       if (!/^(application\/pdf|image\/)/.test(d.mime || '')) a.download = d.ad || 'belge';
@@ -374,7 +384,7 @@ var LOGO = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAQDAwMDAgQDA
       '<div class="field"><label for="g_sf">Şifre</label><input id="g_sf" type="password" autocomplete="current-password"></div>' +
       '<div class="err-txt" id="g_err">' + esc(mesaj || '') + '</div>' +
       '<button class="btn btn-primary btn-block" id="g_go">Giriş yap</button>' +
-      '<p class="foot">Şifrenizi unuttuysanız OSGB Doküman Yönetimi’nde yöneticinizden sıfırlamasını isteyin.<br><a href="#" id="g_ayar">Bağlantı ayarları</a></p></div></div><div id="toast"></div>';
+      '<p class="foot">Şifrenizi unuttuysanız OSGB Doküman Yönetimi’nde yöneticinizden sıfırlamasını isteyin.</p></div></div><div id="toast"></div>';
     function go() {
       var ku = kuId($('#g_ku').value), sf = $('#g_sf').value, e = $('#g_err');
       if (!ku || !sf) { e.textContent = 'Kullanıcı adı ve şifre gerekli.'; return; }
@@ -395,7 +405,6 @@ var LOGO = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAQDAwMDAgQDA
     }
     $('#g_go').onclick = go;
     $('.gate-card').addEventListener('keydown', function (ev) { if (ev.key === 'Enter') go(); });
-    $('#g_ayar').onclick = function (ev) { ev.preventDefault(); ekranKurulum(); };
     $('#g_ku').focus();
   }
 
@@ -412,8 +421,8 @@ var LOGO = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAQDAwMDAgQDA
       return pool(liste, 6, function (f) { return dstGet('data/personel/' + f._id + '.json').then(function (d) { App.personel[f._id] = d ? d.veri : { personel: [] }; }); });
     }).then(function () { App.firma = null; kabuk(); }).catch(function (e) {
       document.body.innerHTML = '<div class="boot" style="flex-direction:column;gap:12px"><div>Veriler yüklenemedi: ' + esc(e.message) + '</div>' +
-        '<div><button class="btn btn-ghost" id="y1">Tekrar dene</button> <button class="btn btn-ghost" id="y2">Bağlantı ayarları</button></div></div>';
-      $('#y1').onclick = veriYukle; $('#y2').onclick = function () { ekranKurulum(); };
+        '<div><button class="btn btn-ghost" id="y1">Tekrar dene</button></div></div>';
+      $('#y1').onclick = veriYukle;
     });
   }
 
@@ -498,15 +507,13 @@ var LOGO = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAQDAwMDAgQDA
   /* ================= kabuk ================= */
   function kabuk() {
     document.body.innerHTML = '<div class="top">' + logoImg('') + '<span class="ttl">Personel Yönetim Sistemi</span><span class="nav"><button id="n_ozet">Genel Bakış</button><button id="n_firma">Firmalar</button>' + (yonetici() ? '<button id="n_kmp">KARMA Personel</button>' : '') + '</span><span class="sp"></span>' +
-      '<a class="btn btn-sm" id="t_osgb" href="https://ozgunandic-ai.github.io/karmaosgb" target="_blank" rel="noopener noreferrer">OSGB Doküman Yönetimi ↗</a>' +
+      '<a class="btn btn-sm" id="t_osgb" href="https://www.karmaosgb.com.tr" target="_blank" rel="noopener noreferrer">OSGB Doküman Yönetimi ↗</a>' +
       '<span class="who">' + esc(App.kullanici.adSoyad || App.kullanici.kullanici) + (yonetici() ? ' · yönetici' : '') + '</span>' +
-      (yonetici() ? '<button class="btn btn-sm" id="t_ayar">Bağlantı kodu</button>' : '') +
       '<button class="btn btn-sm" id="t_cik">Çıkış</button></div><main id="wrap"></main><div id="toast"></div>';
     $('#t_cik').onclick = cikis;
     $('#n_ozet').onclick = function () { App.firma = null; App.ana = 'ozet'; render(); };
     $('#n_firma').onclick = function () { App.firma = null; App.ana = 'firmalar'; render(); };
     if ($('#n_kmp')) $('#n_kmp').onclick = function () { App.firma = null; App.ana = 'kmp'; render(); };
-    if (yonetici()) $('#t_ayar').onclick = baglantiKodu;
     render();
   }
   function render() {
@@ -566,18 +573,33 @@ var LOGO = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAQDAwMDAgQDA
       '<div class="stats"><div class="stat"><b>' + o.firmaSay + ' <span style="font-size:14px;font-weight:500">/ ' + o.firmaToplam + '</span></b><span>Veri girilmiş firma</span></div><div class="stat"><b>' + o.calisan + '</b><span>Toplam aktif çalışan</span></div>' +
       kart('egG', 'Eğitim süresi geçmiş', 'bad') + kart('egY', 'Eğitim süresi yaklaşan', 'warn') + kart('sgG', 'Muayene süresi geçmiş', 'bad') + kart('sgY', 'Muayene süresi yaklaşan', 'warn') + '</div>' +
       '<h2 style="font-size:14px;margin:6px 0 10px">Diğer göstergeler</h2><div class="stats">' + kart('egYok', 'Eğitim kaydı olmayan') + kart('sgYok', 'Muayene kaydı olmayan') + kart('talYok', 'Talimatı olmayan') + kart('mykG', 'Süresi geçmiş MYK', 'bad') + kart('ayr', 'İşten ayrılan') + '</div>' +
-      '<h2 style="font-size:14px;margin:6px 0 10px">Firma bazında durum</h2><div class="card"><div class="card-b tight">';
+      '<h2 style="font-size:14px;margin:6px 0 10px">Firma bazında durum</h2>' +
+      '<div class="card" style="margin-bottom:12px"><div class="card-b" style="display:flex;gap:8px;align-items:center"><input id="o_ara" type="search" autocomplete="off" placeholder="Firma ara…" style="flex:1" value="' + esc(App.oAra || '') + '"><button type="button" class="btn btn-primary" id="o_araBtn">Ara</button><button type="button" class="btn btn-ghost" id="o_araTemiz">Temizle</button></div><div class="small" id="o_araSonuc" style="padding:0 16px 12px"></div></div>' +
+      '<div class="card"><div class="card-b tight">';
     var fl = o.firmalar.slice().sort(function (a, b) { return (b.egG + b.sgG) - (a.egG + a.sgG) || (b.egY + b.sgY) - (a.egY + a.sgY) || firmaAd(a.f).localeCompare(firmaAd(b.f), 'tr'); });
     if (!fl.length) h += '<div class="empty">Size atanmış firma bulunmuyor.</div>';
     else h += '<table class="tbl"><thead><tr><th>Firma</th><th>Personel</th><th>Eğitimi geçmiş</th><th>Eğitimi yaklaşan</th><th>Muayenesi geçmiş</th><th>Muayenesi yaklaşan</th></tr></thead><tbody>' + fl.map(function (x) {
       function c(n, t) { return '<td>' + (n ? '<span class="tag ' + t + '">' + n + '</span>' : '<span class="small">0</span>') + '</td>'; }
-      return '<tr class="clk" data-git="' + esc(x.f._id) + '"><td><strong>' + esc(firmaAd(x.f)) + '</strong></td><td>' + (x.n || '<span class="small">Veri yok</span>') + '</td>' + c(x.egG, 'bad') + c(x.egY, 'warn') + c(x.sgG, 'bad') + c(x.sgY, 'warn') + '</tr>';
+      return '<tr class="clk" data-git="' + esc(x.f._id) + '" data-ara="' + esc(firmaAd(x.f).toLocaleLowerCase('tr')) + '"><td><strong>' + esc(firmaAd(x.f)) + '</strong></td><td>' + (x.n || '<span class="small">Veri yok</span>') + '</td>' + c(x.egG, 'bad') + c(x.egY, 'warn') + c(x.sgG, 'bad') + c(x.sgY, 'warn') + '</tr>';
     }).join('') + '</tbody></table>';
     h += '</div></div>';
     $('#wrap').innerHTML = h;
     $('#o_yenile').onclick = function () { App.src = null; viewOzet(); };
     $$('[data-o]').forEach(function (b) { b.onclick = function () { ozetDetay(b.getAttribute('data-o')); }; });
     $$('[data-git]').forEach(function (r) { r.onclick = function () { gitFirma(r.getAttribute('data-git')); }; });
+    function firmaFiltre() {
+      var q = (App.oAra || '').toLocaleLowerCase('tr').replace(/\s+/g, ' ').trim(), say = 0;
+      $$('tr[data-ara]').forEach(function (tr) {
+        var g = !q || q.split(' ').every(function (w) { return tr.getAttribute('data-ara').indexOf(w) >= 0; });
+        tr.style.display = g ? '' : 'none'; if (g) say++;
+      });
+      $('#o_araSonuc').textContent = q ? (say ? say + ' firma bulundu' : 'Eşleşen firma yok') : '';
+    }
+    $('#o_ara').oninput = function () { App.oAra = this.value; firmaFiltre(); };
+    $('#o_ara').onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); App.oAra = this.value; firmaFiltre(); } };
+    $('#o_araBtn').onclick = function () { App.oAra = $('#o_ara').value; firmaFiltre(); $('#o_ara').focus(); };
+    $('#o_araTemiz').onclick = function () { App.oAra = ''; $('#o_ara').value = ''; firmaFiltre(); $('#o_ara').focus(); };
+    firmaFiltre();
   }
   function gitFirma(id) { App.firma = id; App.sekme = 'personel'; App.pAra = ''; App.ana = 'firmalar'; render(); }
   function ozetDetay(k) {
@@ -1396,9 +1418,6 @@ var LOGO = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAQDAwMDAgQDA
 
   /* ================= başlangıç ================= */
   function baslat() {
-    CFG = CFG || cfgOku();
-    if (!cfgGecerli(CFG)) { ekranKurulum(); return; }
-    SRC = CFG.src; DST = CFG.dst;
     var ku = null; try { ku = sessionStorage.getItem('karma_pys:oturum'); } catch (e) { }
     if (!ku) { ekranGiris(); return; }
     yukleniyor('Oturum açılıyor…');
